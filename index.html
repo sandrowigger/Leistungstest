@@ -35,6 +35,31 @@
     border-radius: 12px;
     padding: 18px 20px;
     color: #f0f0ee;
+    position: relative;
+  }
+  .card.disabled-card > *:not(.disabled-overlay) { opacity: 0.35; }
+  .card.disabled-card { pointer-events: none; }
+  .disabled-overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(15, 15, 14, 0.55);
+    z-index: 5;
+  }
+  .card.disabled-card .disabled-overlay { display: flex; }
+  .disabled-overlay-pill {
+    background: #2e2e2c;
+    color: #f0f0ee;
+    border: 1px solid #3a3a38;
+    border-radius: 8px;
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
   .name {
     width: 100%;
@@ -628,6 +653,7 @@
   <div class="view" id="test-view">
     <div class="grid">
       <div class="card" id="p1-card">
+        <div class="disabled-overlay"><div class="disabled-overlay-pill">Nicht aktiv</div></div>
         <input class="name" id="p1-name" value="Person 1" />
         <div class="pressure-row">
           <div class="pressure-field">
@@ -668,6 +694,7 @@
         <button class="btn-export" id="p1-export" style="display:none;">Als PDF exportieren (Ergebnisse + Selbstdeklaration)</button>
       </div>
       <div class="card" id="p2-card">
+        <div class="disabled-overlay"><div class="disabled-overlay-pill">Nicht aktiv</div></div>
         <input class="name" id="p2-name" value="Person 2" />
         <div class="pressure-row">
           <div class="pressure-field">
@@ -1291,6 +1318,7 @@
     };
 
     const el = {
+      card: document.getElementById(id + "-card"),
       status: document.getElementById(id + "-status"),
       stage: document.getElementById(id + "-stage"),
       target: document.getElementById(id + "-target"),
@@ -1565,6 +1593,12 @@
       sigParticipant.clear();
       sigTimekeeper.clear();
       render();
+    }, setDisabled: function(disabled) {
+      el.card.classList.toggle("disabled-card", disabled);
+      el.btn.disabled = disabled;
+      el.nameInput.disabled = disabled;
+      el.pressureBefore.disabled = disabled;
+      el.pressureAfter.disabled = disabled;
     } };
   }
 
@@ -1679,6 +1713,9 @@
     // Test sauber zurücksetzen
     p1.resetSilently();
     p2.resetSilently();
+    // Karte sperren, wenn der Kandidat auf der Startseite nicht erfasst wurde
+    p1.setDisabled(!name1);
+    p2.setDisabled(!name2);
     showView("test");
   });
 
@@ -1686,6 +1723,8 @@
     if (!confirm("Test wirklich beenden und zur Startseite zurückkehren? Alle Zeiten gehen verloren.")) return;
     p1.resetSilently();
     p2.resetSilently();
+    p1.setDisabled(false);
+    p2.setDisabled(false);
     startP1Name.value = "";
     startP2Name.value = "";
     const tk = document.getElementById("start-timekeeper-name");
