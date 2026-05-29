@@ -417,13 +417,23 @@
   .name-field input::placeholder { color: #4d7099; opacity: 0.8; }
   .health-question {
     margin-top: 16px;
-    padding-top: 14px;
-    border-top: 1px solid #2d4663;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: #3a2606;
+    border: 1px solid #8a5a14;
+  }
+  .health-q-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: #F0B860;
+    margin-bottom: 8px;
   }
   .health-q-text {
     font-size: 12px;
     line-height: 1.45;
-    color: #D4E4F4;
+    color: #F5E2C0;
     margin-bottom: 12px;
   }
   .health-options {
@@ -438,14 +448,14 @@
     gap: 8px;
     padding: 10px;
     border-radius: 8px;
-    border: 1px solid #2d4663;
-    background: #0f1c2d;
+    border: 1px solid #8a5a14;
+    background: #2a1b04;
     cursor: pointer;
     font-size: 15px;
     font-weight: 500;
     text-transform: none !important;
     letter-spacing: 0 !important;
-    color: #D4E4F4;
+    color: #F5E2C0;
     transition: background 0.1s, border-color 0.1s;
   }
   .health-opt input[type="radio"] {
@@ -489,15 +499,24 @@
     font-size: 16px;
     font-weight: 500;
     border-radius: 8px;
-    border: 1px solid #97C459;
-    background: #C0DD97;
-    color: #173404;
+    border: 1px solid #A7CE7C;
+    background: #D7EDC2;
+    color: #2E5510;
     cursor: pointer;
     font-family: inherit;
     transition: background 0.1s, transform 0.05s;
   }
-  .btn-large:hover { background: #97C459; }
+  .btn-large:hover { background: #C3E2A6; }
   .btn-large:active { transform: scale(0.99); }
+  .btn-large.disabled,
+  .btn-large:disabled {
+    background: #2a2a28;
+    border-color: #3a3a38;
+    color: #6b6b65;
+    cursor: not-allowed;
+  }
+  .btn-large.disabled:hover,
+  .btn-large:disabled:hover { background: #2a2a28; }
   .end-row {
     max-width: 1100px;
     margin: 20px auto 0;
@@ -556,6 +575,7 @@
         <label style="margin-top:12px;">Geburtsdatum</label>
         <input id="start-p1-dob" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" />
         <div class="health-question">
+          <div class="health-q-title">Selbstdeklaration</div>
           <div class="health-q-text">Hat sich an ihrem persönlichen Zustand (gemäss Fragebogen) seit der letzten Atemschutztauglichkeits-Konsultation beim Arzt oder der letzten Selbstdeklaration etwas Wichtiges verändert?</div>
           <div class="health-options">
             <label class="health-opt nein">
@@ -576,6 +596,7 @@
         <label style="margin-top:12px;">Geburtsdatum</label>
         <input id="start-p2-dob" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" />
         <div class="health-question">
+          <div class="health-q-title">Selbstdeklaration</div>
           <div class="health-q-text">Hat sich an ihrem persönlichen Zustand (gemäss Fragebogen) seit der letzten Atemschutztauglichkeits-Konsultation beim Arzt oder der letzten Selbstdeklaration etwas Wichtiges verändert?</div>
           <div class="health-options">
             <label class="health-opt nein">
@@ -592,7 +613,7 @@
       </div>
     </div>
     <div class="name-inputs single">
-      <div class="name-field">
+      <div class="name-field timekeeper-field">
         <label>Zeitnehmer</label>
         <input id="start-timekeeper-name" placeholder="Name eingeben" />
       </div>
@@ -993,7 +1014,7 @@
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.3);
     doc.line(marginL, y - 4, pageW - marginR, y - 4);
-    summaryRow("Verbrauchter Druck", bar(p.consumed), { bold: true });
+    summaryRow("Verbrauchte Luft", bar(p.consumed), { bold: true });
 
     // Urteil-Box (kompakt)
     y += 5;
@@ -1350,7 +1371,7 @@
         '<div class="overview-subtitle">Flaschendruck</div>' +
         '<div class="total-row"><span>Druck vor Test</span><span class="log-time">' + bar(p.before) + '</span></div>' +
         '<div class="total-row"><span>Druck nach Test</span><span class="log-time">' + bar(p.after) + '</span></div>' +
-        '<div class="total-row grand"><span>Verbrauchter Druck</span>' + consumedDisplay + '</div>' +
+        '<div class="total-row grand"><span>Verbrauchte Luft</span>' + consumedDisplay + '</div>' +
         '<div class="verdict ' + verdictCls + '">' + verdictText + '</div>';
     }
 
@@ -1605,11 +1626,38 @@
   startBtn.addEventListener("click", () => {
     const info1 = getPersonStartInfo("p1");
     const info2 = getPersonStartInfo("p2");
+    const name1 = startP1Name.value.trim();
+    const name2 = startP2Name.value.trim();
+
+    // Mindestens ein Kandidat muss erfasst sein
+    if (!name1 && !name2) {
+      alert("Bitte mindestens einen Kandidaten erfassen, bevor der Test gestartet wird.");
+      return;
+    }
+
+    // Vollständigkeitsprüfung: Wenn ein Name eingegeben ist, müssen
+    // Geburtsdatum und Selbstdeklaration ausgefüllt sein.
+    const missing = [];
+    function checkCandidate(name, info, label) {
+      if (!name) return; // ohne Name nimmt der Kandidat nicht teil
+      const fehlend = [];
+      if (!info.dob.trim()) fehlend.push("Geburtsdatum");
+      if (!info.healthAnswered) fehlend.push("Selbstdeklaration (Ja/Nein)");
+      if (fehlend.length > 0) {
+        missing.push(label + " (" + name + "): " + fehlend.join(", "));
+      }
+    }
+    checkCandidate(name1, info1, "Kandidat 1");
+    checkCandidate(name2, info2, "Kandidat 2");
+    if (missing.length > 0) {
+      alert("Bitte alle Felder ausfüllen, bevor der Test gestartet wird:\n\n" + missing.join("\n"));
+      return;
+    }
 
     // Kandidaten mit Antwort "ja" sind nicht zugelassen
     const blocked = [];
-    if (info1.healthAnswer === "ja") blocked.push(startP1Name.value.trim() || "Kandidat 1");
-    if (info2.healthAnswer === "ja") blocked.push(startP2Name.value.trim() || "Kandidat 2");
+    if (name1 && info1.healthAnswer === "ja") blocked.push(name1);
+    if (name2 && info2.healthAnswer === "ja") blocked.push(name2);
     if (blocked.length > 0) {
       alert("Nicht zum Test zugelassen:\n\n" + blocked.join("\n") +
         "\n\nBei «Ja» zur Gesundheitsfrage darf der Kandidat nicht am Test teilnehmen. " +
@@ -1618,8 +1666,8 @@
     }
 
     // Namen übernehmen (Fallback falls leer)
-    testP1Name.value = startP1Name.value.trim() || "Kandidat 1";
-    testP2Name.value = startP2Name.value.trim() || "Kandidat 2";
+    testP1Name.value = name1 || "Kandidat 1";
+    testP2Name.value = name2 || "Kandidat 2";
     // Test sauber zurücksetzen
     p1.resetSilently();
     p2.resetSilently();
@@ -1652,6 +1700,37 @@
       });
     });
   });
+
+  // Start-Button nur aktivieren, wenn alle Pflichtangaben vollständig sind
+  function updateStartButtonState() {
+    const n1 = startP1Name.value.trim();
+    const n2 = startP2Name.value.trim();
+    const i1 = getPersonStartInfo("p1");
+    const i2 = getPersonStartInfo("p2");
+    let ok = (n1 || n2); // mindestens ein Kandidat
+    function complete(name, info) {
+      if (!name) return true; // ohne Name keine Pflicht
+      return info.dob.trim() !== "" && info.healthAnswered;
+    }
+    if (!complete(n1, i1)) ok = false;
+    if (!complete(n2, i2)) ok = false;
+    startBtn.disabled = !ok;
+    startBtn.classList.toggle("disabled", !ok);
+  }
+
+  // Auf alle relevanten Eingaben reagieren
+  [startP1Name, startP2Name,
+   document.getElementById("start-p1-dob"),
+   document.getElementById("start-p2-dob")
+  ].forEach(function(el) {
+    if (el) el.addEventListener("input", updateStartButtonState);
+  });
+  ["p1", "p2"].forEach(function(pid) {
+    document.querySelectorAll('input[name="' + pid + '-health"]').forEach(function(radio) {
+      radio.addEventListener("change", updateStartButtonState);
+    });
+  });
+  updateStartButtonState();
 })();
 </script>
 </body>
