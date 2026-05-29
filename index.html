@@ -120,6 +120,7 @@
     font-variant-numeric: tabular-nums;
     color: #f0f0ee;
   }
+  .timer.warn { color: #F0A030; }
   .timer.over { color: #FF6B6B; }
   .total-timer {
     font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
@@ -130,6 +131,7 @@
     font-variant-numeric: tabular-nums;
     color: #8AD66A;
   }
+  .total-timer.warn { color: #F0A030; }
   .total-timer.over { color: #FF6B6B; }
   .btn {
     width: 100%;
@@ -1374,7 +1376,7 @@
     }
 
     function render() {
-      el.timer.classList.remove("over");
+      el.timer.classList.remove("over", "warn");
       if (state.mode === "done") {
         el.status.textContent = "Abgeschlossen";
         el.stage.textContent = "Test beendet";
@@ -1445,8 +1447,12 @@
     function updateTotal() {
       const t = computeTotal();
       el.total.textContent = fmt(t);
-      if (t > TOTAL_MAX) el.total.classList.add("over");
-      else el.total.classList.remove("over");
+      el.total.classList.remove("over", "warn");
+      if (t > TOTAL_MAX) {
+        el.total.classList.add("over");
+      } else if (t > TOTAL_MAX - 120) { // 2 min vor max
+        el.total.classList.add("warn");
+      }
     }
 
     function tick() {
@@ -1454,8 +1460,12 @@
       const elapsed = (performance.now() - state.startedAt) / 1000;
       el.timer.textContent = fmt(elapsed);
       const max = state.mode === "station" ? STATIONS[state.stageIndex].max : TRANSITION_MAX;
-      if (elapsed > max) el.timer.classList.add("over");
-      else el.timer.classList.remove("over");
+      el.timer.classList.remove("over", "warn");
+      if (elapsed > max) {
+        el.timer.classList.add("over");
+      } else if (state.mode === "station" && elapsed > max - 30) { // 30 s vor max (nur Posten)
+        el.timer.classList.add("warn");
+      }
       updateTotal();
       state.rafId = requestAnimationFrame(tick);
     }
