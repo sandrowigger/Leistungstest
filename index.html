@@ -1098,7 +1098,6 @@
 
     const name = (opts.name || "").trim() || "—";
     const dob = (opts.dob || "").trim() || "—";
-    const feuerwehr = "Feuerwehr Urdorf";
     const healthGood = !!opts.healthGood; // true => Gesundheit gut => NEIN ankreuzen
     const sigImg = opts.signature || null;
 
@@ -1129,7 +1128,6 @@
       doc.text(value, marginL + 42, y);
       y += 11;
     }
-    fieldRow("Feuerwehr:", feuerwehr);
     fieldRow("Vorname/Name:", name);
     fieldRow("Geburtsdatum:", dob);
 
