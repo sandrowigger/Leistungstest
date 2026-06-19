@@ -469,6 +469,59 @@
     color: #D4E4F4;
     font-family: inherit;
   }
+  .name-field select.candidate-select {
+    width: 100%;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 9px 10px;
+    border: 1px solid #2d4663;
+    border-radius: 8px;
+    background: #0f1c2d;
+    color: #D4E4F4;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .name-field select.candidate-select:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+  .candidate-load-status {
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 14.5px;
+    line-height: 1.45;
+    display: none;
+  }
+  .candidate-load-status.pending {
+    display: block;
+    background: #14304a;
+    border: 1px solid #2d5680;
+    color: #9cc7ee;
+  }
+  .candidate-load-status.error {
+    display: block;
+    background: #3a1212;
+    border: 1px solid #7a2a2a;
+    color: #f0a8a8;
+  }
+  .candidate-load-status.success {
+    display: block;
+    background: #122e1a;
+    border: 1px solid #2a6a3a;
+    color: #9ce0ad;
+  }
+  .candidate-load-status button.reload-btn {
+    margin-left: 10px;
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-family: inherit;
+  }
   .name-field input::placeholder { color: #4d7099; opacity: 0.8; }
   .name-field input.invalid-input {
     border-color: #E24B4A !important;
@@ -655,12 +708,16 @@
         <tbody id="stations-tbody"></tbody>
       </table>
     </div>
+    <div class="candidate-load-status" id="candidate-load-status"></div>
     <div class="name-inputs">
       <div class="name-field">
         <label>Kandidat 1</label>
-        <input id="start-p1-name" placeholder="Name eingeben" />
+        <select id="start-p1-select" class="candidate-select">
+          <option value="">— Kandidat auswählen —</option>
+        </select>
+        <input id="start-p1-name" type="hidden" />
         <label style="margin-top:12px;">Geburtsdatum</label>
-        <input id="start-p1-dob" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" />
+        <input id="start-p1-dob" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" readonly />
         <div class="health-question">
           <div class="health-q-title">Selbstdeklaration</div>
           <div class="health-q-text">Hat sich an ihrem persönlichen Zustand (gemäss Fragebogen) seit der letzten Atemschutztauglichkeits-Konsultation beim Arzt oder der letzten Selbstdeklaration etwas Wichtiges verändert?</div>
@@ -679,9 +736,12 @@
       </div>
       <div class="name-field">
         <label>Kandidat 2</label>
-        <input id="start-p2-name" placeholder="Name eingeben" />
+        <select id="start-p2-select" class="candidate-select">
+          <option value="">— Kandidat auswählen —</option>
+        </select>
+        <input id="start-p2-name" type="hidden" />
         <label style="margin-top:12px;">Geburtsdatum</label>
-        <input id="start-p2-dob" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" />
+        <input id="start-p2-dob" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" readonly />
         <div class="health-question">
           <div class="health-q-title">Selbstdeklaration</div>
           <div class="health-q-text">Hat sich an ihrem persönlichen Zustand (gemäss Fragebogen) seit der letzten Atemschutztauglichkeits-Konsultation beim Arzt oder der letzten Selbstdeklaration etwas Wichtiges verändert?</div>
@@ -1355,6 +1415,127 @@
   // und versendet eine E-Mail mit dem PDF als Anhang an die im Skript festgelegte Adresse.
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw71zugYbAz_HmCJ8B4r5koumG64P6d2vKnxftjAESpFYverU53A4BgXDISDpsVU-zM/exec";
 
+  // ===========================================================================
+  // Kandidaten aus Google Sheets laden und Auswahllisten befüllen
+  // ===========================================================================
+  // Geladene offene Kandidaten (noch ohne Eintrag in "Test bestanden").
+  // Jeder Eintrag: { row, name, vorname, dob, label }
+  let openCandidates = [];
+
+  function setLoadStatus(kind, message, withReload) {
+    const el = document.getElementById("candidate-load-status");
+    if (!el) return;
+    el.className = "candidate-load-status " + kind;
+    el.innerHTML = message;
+    if (withReload) {
+      const btn = document.createElement("button");
+      btn.className = "reload-btn";
+      btn.textContent = "Erneut versuchen";
+      btn.addEventListener("click", loadCandidates);
+      el.appendChild(btn);
+    }
+  }
+
+  // Wandelt ein Datum (Text aus dem Sheet) in TT.MM.JJJJ um, falls möglich.
+  function normalizeDob(value) {
+    const v = (value || "").toString().trim();
+    if (!v) return "";
+    // Bereits TT.MM.JJJJ?
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(v)) return v;
+    // ISO (JJJJ-MM-TT) oder Datum-String → umwandeln
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) {
+      const pad = n => String(n).padStart(2, "0");
+      return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear();
+    }
+    return v;
+  }
+
+  // Befüllt beide Auswahllisten mit den offenen Kandidaten.
+  function populateCandidateSelects() {
+    ["p1", "p2"].forEach(function(pid) {
+      const sel = document.getElementById("start-" + pid + "-select");
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = '<option value="">— Kandidat auswählen —</option>';
+      openCandidates.forEach(function(c) {
+        const opt = document.createElement("option");
+        opt.value = String(c.row);
+        opt.textContent = c.label;
+        sel.appendChild(opt);
+      });
+      // Vorherige Auswahl wiederherstellen, falls noch vorhanden
+      if (current && openCandidates.some(function(c){ return String(c.row) === current; })) {
+        sel.value = current;
+      } else {
+        sel.value = "";
+      }
+    });
+  }
+
+  // Lädt die Kandidatenliste vom Apps Script (action=list).
+  function loadCandidates() {
+    setLoadStatus("pending", "Kandidatenliste wird geladen…");
+    ["p1", "p2"].forEach(function(pid) {
+      const sel = document.getElementById("start-" + pid + "-select");
+      if (sel) sel.disabled = true;
+    });
+    return fetch(APPS_SCRIPT_URL + "?action=list", { method: "GET" })
+      .then(function(res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function(data) {
+        if (!data || data.ok === false) {
+          throw new Error((data && data.error) ? data.error : "Unbekannte Antwort");
+        }
+        const list = data.candidates || [];
+        openCandidates = list.map(function(c) {
+          const name = (c.name || "").trim();
+          const vorname = (c.vorname || "").trim();
+          const dob = normalizeDob(c.dob);
+          const label = (name + " " + vorname).trim() + (dob ? " (" + dob + ")" : "");
+          return { row: c.row, name: name, vorname: vorname, dob: dob, label: label };
+        });
+        populateCandidateSelects();
+        ["p1", "p2"].forEach(function(pid) {
+          const sel = document.getElementById("start-" + pid + "-select");
+          if (sel) sel.disabled = false;
+        });
+        if (openCandidates.length === 0) {
+          setLoadStatus("success", "Alle Kandidaten haben den Test bereits absolviert. Es stehen keine offenen Kandidaten zur Auswahl.");
+        } else {
+          setLoadStatus("success", "✓ " + openCandidates.length + " offene(r) Kandidat(en) geladen.");
+        }
+        if (typeof updateStartButtonState === "function") updateStartButtonState();
+      })
+      .catch(function(err) {
+        const msg = err && err.message ? err.message : String(err);
+        setLoadStatus("error",
+          "⚠ Kandidatenliste konnte nicht geladen werden (" + msg + "). " +
+          "Bitte Internetverbindung prüfen.", true);
+        ["p1", "p2"].forEach(function(pid) {
+          const sel = document.getElementById("start-" + pid + "-select");
+          if (sel) sel.disabled = false;
+        });
+      });
+  }
+
+  // Trägt bei bestandenem Test das heutige Datum in Spalte "Test bestanden" ein
+  // (action=pass). Läuft im Hintergrund; Fehler werden still protokolliert.
+  function markTestPassed(row, dateStr) {
+    if (!row) return Promise.resolve();
+    const form = new FormData();
+    form.append("action", "pass");
+    form.append("row", String(row));
+    form.append("date", dateStr || "");
+    return fetch(APPS_SCRIPT_URL, { method: "POST", body: form })
+      .then(function(res) { return res.json().catch(function(){ return { ok: true }; }); })
+      .catch(function(err) {
+        console.warn("Eintrag 'Test bestanden' fehlgeschlagen:", err);
+      });
+  }
+
   function setStatus(statusEl, kind, message) {
     if (!statusEl) return;
     statusEl.style.display = "block";
@@ -1401,7 +1582,7 @@
     });
   }
 
-  function exportCombinedPdf(state, name, pressures, resultExtras, declOpts, statusEl) {
+  function exportCombinedPdf(state, name, pressures, resultExtras, declOpts, statusEl, onSuccess) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
       alert("PDF-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.");
       return;
@@ -1434,6 +1615,7 @@
       .then(function() {
         setStatus(statusEl, "success",
           "✓ PDF wurde per E-Mail an fw.urdorf@gmail.com versandt (" + filename + ")");
+        if (typeof onSuccess === "function") onSuccess(dateStr);
       })
       .catch(function(err) {
         const msg = err && (err.message || err.text) ? (err.message || err.text) : String(err);
@@ -1707,7 +1889,12 @@
           healthGood: info.healthGood,
           signature: sigParticipant.toDataURL()
         },
-        el.uploadStatus
+        el.uploadStatus,
+        function(passDate) {
+          // Test bestanden → Datum in Google Sheets eintragen
+          const row = selectedRow[id];
+          if (row) markTestPassed(row, passDate);
+        }
       );
     });
     el.pressureBefore.addEventListener("input", function() { if (state.mode === "done") renderOverview(); });
@@ -1814,10 +2001,53 @@
   const testP1Name = document.getElementById("p1-name");
   const testP2Name = document.getElementById("p2-name");
 
+  // Auswahl eines Kandidaten überträgt Name + Geburtsdatum in die (versteckten)
+  // Felder und merkt sich die Zeilennummer für das spätere Zurückschreiben.
+  const selectedRow = { p1: null, p2: null };
+
+  function getOtherPid(pid) { return pid === "p1" ? "p2" : "p1"; }
+
+  function onCandidateSelected(pid) {
+    const sel = document.getElementById("start-" + pid + "-select");
+    const nameEl = document.getElementById("start-" + pid + "-name");
+    const dobEl = document.getElementById("start-" + pid + "-dob");
+    if (!sel) return;
+    const rowVal = sel.value;
+    if (!rowVal) {
+      selectedRow[pid] = null;
+      if (nameEl) nameEl.value = "";
+      if (dobEl) dobEl.value = "";
+    } else {
+      const cand = openCandidates.find(function(c){ return String(c.row) === rowVal; });
+      if (cand) {
+        selectedRow[pid] = cand.row;
+        if (nameEl) nameEl.value = (cand.name + " " + cand.vorname).trim();
+        if (dobEl) dobEl.value = cand.dob;
+      }
+      // Verhindern, dass derselbe Kandidat zweimal gewählt wird
+      const other = getOtherPid(pid);
+      const otherSel = document.getElementById("start-" + other + "-select");
+      if (otherSel && otherSel.value === rowVal) {
+        otherSel.value = "";
+        onCandidateSelected(other);
+        alert("Dieser Kandidat ist bereits in der anderen Auswahl gewählt. Bitte einen anderen Kandidaten wählen.");
+      }
+    }
+    if (typeof updateStartButtonState === "function") updateStartButtonState();
+  }
+
+  ["p1", "p2"].forEach(function(pid) {
+    const sel = document.getElementById("start-" + pid + "-select");
+    if (sel) sel.addEventListener("change", function(){ onCandidateSelected(pid); });
+  });
+
   function showView(which) {
     if (which === "start") {
       startView.classList.add("active");
       testView.classList.remove("active");
+      // Kandidatenliste aktualisieren, damit gerade absolvierte Kandidaten
+      // verschwinden und neue Einträge erscheinen
+      if (typeof loadCandidates === "function") loadCandidates();
     } else {
       startView.classList.remove("active");
       testView.classList.add("active");
@@ -1893,6 +2123,12 @@
     p2.setDisabled(false);
     startP1Name.value = "";
     startP2Name.value = "";
+    selectedRow.p1 = null;
+    selectedRow.p2 = null;
+    ["p1", "p2"].forEach(function(pid) {
+      const sel = document.getElementById("start-" + pid + "-select");
+      if (sel) sel.value = "";
+    });
     const tk = document.getElementById("start-timekeeper-name");
     if (tk) tk.value = "";
     ["p1", "p2"].forEach(function(pid) {
@@ -1939,19 +2175,18 @@
     });
   }
 
-  // Auf alle relevanten Eingaben reagieren
-  [startP1Name, startP2Name,
-   document.getElementById("start-p1-dob"),
-   document.getElementById("start-p2-dob")
-  ].forEach(function(el) {
-    if (el) el.addEventListener("input", updateStartButtonState);
-  });
+  // Auf alle relevanten Eingaben reagieren (Dropdowns + Selbstdeklaration)
   ["p1", "p2"].forEach(function(pid) {
+    const sel = document.getElementById("start-" + pid + "-select");
+    if (sel) sel.addEventListener("change", updateStartButtonState);
     document.querySelectorAll('input[name="' + pid + '-health"]').forEach(function(radio) {
       radio.addEventListener("change", updateStartButtonState);
     });
   });
   updateStartButtonState();
+
+  // Kandidatenliste beim Öffnen der Seite automatisch laden
+  loadCandidates();
 
   // Flaschendruck-Erinnerung wegklickbar machen
   const pressureReminderClose = document.getElementById("pressure-reminder-close");
