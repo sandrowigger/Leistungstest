@@ -271,6 +271,34 @@
   }
   .btn-export:hover { background: #2d4663; }
   .btn-export:active { transform: scale(0.99); }
+  .export-status {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    border: 1px solid;
+  }
+  .export-status.pending {
+    background: #2a2a28;
+    border-color: #3a3a38;
+    color: #b8b8b3;
+  }
+  .export-status.success {
+    background: #1c3409;
+    border-color: #639922;
+    color: #C0DD97;
+  }
+  .export-status.error {
+    background: #3a1212;
+    border-color: #E24B4A;
+    color: #F09595;
+  }
+  .export-status a {
+    color: inherit;
+    text-decoration: underline;
+    font-weight: 500;
+  }
   .btn-export.decl { margin-top: 8px; }
   .signatures {
     margin-top: 16px;
@@ -442,6 +470,38 @@
     font-family: inherit;
   }
   .name-field input::placeholder { color: #4d7099; opacity: 0.8; }
+  .name-field input.invalid-input {
+    border-color: #E24B4A !important;
+    background: #3a1212 !important;
+  }
+  .reminder-banner {
+    max-width: 1100px;
+    margin: 0 auto 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: #3a2606;
+    border: 1px solid #8a5a14;
+    color: #F5E2C0;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .reminder-banner b { color: #F0B860; }
+  .reminder-close {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    color: #F0B860;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    line-height: 1;
+  }
+  .reminder-close:hover { background: rgba(240, 184, 96, 0.15); }
   .health-question {
     margin-top: 16px;
     padding: 14px 16px;
@@ -651,6 +711,10 @@
   </div>
 
   <div class="view" id="test-view">
+    <div class="reminder-banner" id="pressure-reminder">
+      <span>💡 Bitte den <b>Flaschendruck vor dem Test</b> bei jedem Kandidaten erfassen – und nach dem Test den Enddruck nicht vergessen.</span>
+      <button type="button" class="reminder-close" id="pressure-reminder-close" aria-label="Hinweis schliessen">✕</button>
+    </div>
     <div class="grid">
       <div class="card" id="p1-card">
         <div class="disabled-overlay"><div class="disabled-overlay-pill">Nicht aktiv</div></div>
@@ -692,6 +756,7 @@
           </div>
         </div>
         <button class="btn-export" id="p1-export" style="display:none;">Als PDF exportieren (Ergebnisse + Selbstdeklaration)</button>
+        <div class="export-status" id="p1-export-status" style="display:none;"></div>
       </div>
       <div class="card" id="p2-card">
         <div class="disabled-overlay"><div class="disabled-overlay-pill">Nicht aktiv</div></div>
@@ -733,6 +798,7 @@
           </div>
         </div>
         <button class="btn-export" id="p2-export" style="display:none;">Als PDF exportieren (Ergebnisse + Selbstdeklaration)</button>
+        <div class="export-status" id="p2-export-status" style="display:none;"></div>
       </div>
     </div>
     <div class="end-row">
@@ -1284,8 +1350,58 @@
     doc.text("Atemschutz-Leistungstest · Feuerwehr Urdorf", pageW / 2, pageH - 10, { align: "center" });
   }
 
-  // Kombinierter Export: Seite 1 = Testergebnisse, Seite 2 = Selbstdeklaration
-  function exportCombinedPdf(state, name, pressures, resultExtras, declOpts) {
+  // Google Apps Script Web-App für PDF-Versand per E-Mail mit Anhang
+  // Endpunkt akzeptiert POST mit FormData (candidate_name, date, time, filename, pdf_base64)
+  // und versendet eine E-Mail mit dem PDF als Anhang an die im Skript festgelegte Adresse.
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw71zugYbAz_HmCJ8B4r5koumG64P6d2vKnxftjAESpFYverU53A4BgXDISDpsVU-zM/exec";
+
+  function setStatus(statusEl, kind, message) {
+    if (!statusEl) return;
+    statusEl.style.display = "block";
+    statusEl.className = "export-status " + kind;
+    statusEl.innerHTML = message;
+  }
+
+  // Blob → Base64 (ohne data:-Prefix)
+  function blobToBase64(blob) {
+    return new Promise(function(resolve, reject) {
+      const reader = new FileReader();
+      reader.onloadend = function() {
+        const result = reader.result || "";
+        const comma = result.indexOf(",");
+        resolve(comma >= 0 ? result.substring(comma + 1) : result);
+      };
+      reader.onerror = function() { reject(reader.error || new Error("FileReader-Fehler")); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Sendet das PDF per Google Apps Script als E-Mail-Anhang.
+  // FormData wird verwendet (kein Content-Type-Header setzen!), damit der
+  // Request als "simple request" durchgeht und kein CORS-Preflight nötig ist.
+  function sendPdfViaAppsScript(filename, blob, candidateName, dateStr, timeStr) {
+    return blobToBase64(blob).then(function(b64) {
+      const form = new FormData();
+      form.append("candidate_name", candidateName || "Kandidat");
+      form.append("date", dateStr || "");
+      form.append("time", timeStr || "");
+      form.append("filename", filename);
+      form.append("pdf_base64", b64);
+      return fetch(APPS_SCRIPT_URL, { method: "POST", body: form });
+    }).then(function(res) {
+      if (!res.ok) {
+        return res.text().then(function(t) { throw new Error("HTTP " + res.status + " – " + t); });
+      }
+      return res.json().catch(function() { return { ok: true }; });
+    }).then(function(data) {
+      if (data && data.ok === false) {
+        throw new Error(data.error || "Unbekannter Fehler im Skript");
+      }
+      return data;
+    });
+  }
+
+  function exportCombinedPdf(state, name, pressures, resultExtras, declOpts, statusEl) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
       alert("PDF-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.");
       return;
@@ -1300,12 +1416,33 @@
     doc.addPage();
     renderDeclarationPage(doc, declOpts);
 
-    // Dateiname
+    // Dateiname und Datums-/Uhrzeit-Strings
     const now = new Date();
     const pad = n => String(n).padStart(2, "0");
     const safeName = (candidateName || "Kandidat").replace(/[^a-zA-ZäöüÄÖÜß0-9_\-]/g, "_").replace(/_+/g, "_");
     const safeDate = pad(now.getDate()) + "-" + pad(now.getMonth() + 1) + "-" + now.getFullYear();
-    doc.save("Atemschutz-Leistungstest_" + safeName + "_" + safeDate + ".pdf");
+    const dateStr = pad(now.getDate()) + "." + pad(now.getMonth() + 1) + "." + now.getFullYear();
+    const timeStr = pad(now.getHours()) + ":" + pad(now.getMinutes());
+    const filename = "Atemschutz-Leistungstest_" + safeName + "_" + safeDate + ".pdf";
+
+    // Blob extrahieren (für Versand und ggf. lokales Speichern)
+    const blob = doc.output("blob");
+
+    // Per Apps Script senden — lokal speichern nur, falls der Versand fehlschlägt
+    setStatus(statusEl, "pending", "PDF wird per E-Mail versandt…");
+    sendPdfViaAppsScript(filename, blob, candidateName, dateStr, timeStr)
+      .then(function() {
+        setStatus(statusEl, "success",
+          "✓ PDF wurde per E-Mail an fw.urdorf@gmail.com versandt (" + filename + ")");
+      })
+      .catch(function(err) {
+        const msg = err && (err.message || err.text) ? (err.message || err.text) : String(err);
+        // Versand fehlgeschlagen → PDF jetzt lokal speichern, damit nichts verloren geht
+        try { doc.save(filename); } catch (e) {}
+        setStatus(statusEl, "error",
+          "⚠ E-Mail-Versand fehlgeschlagen: " + msg + "<br>" +
+          "Das PDF wurde stattdessen lokal gespeichert (" + filename + ") und kann manuell versandt werden.");
+      });
   }
 
   function makePerson(id) {
@@ -1329,6 +1466,7 @@
       overview: document.getElementById(id + "-overview"),
       nameInput: document.getElementById(id + "-name"),
       exportBtn: document.getElementById(id + "-export"),
+      uploadStatus: document.getElementById(id + "-export-status"),
       pressureBefore: document.getElementById(id + "-pressure-before"),
       pressureAfter: document.getElementById(id + "-pressure-after"),
       signatures: document.getElementById(id + "-signatures"),
@@ -1568,7 +1706,8 @@
           dob: info.dob,
           healthGood: info.healthGood,
           signature: sigParticipant.toDataURL()
-        }
+        },
+        el.uploadStatus
       );
     });
     el.pressureBefore.addEventListener("input", function() { if (state.mode === "done") renderOverview(); });
@@ -1592,6 +1731,7 @@
       el.pressureAfter.value = "";
       sigParticipant.clear();
       sigTimekeeper.clear();
+      if (el.uploadStatus) { el.uploadStatus.style.display = "none"; el.uploadStatus.innerHTML = ""; }
       render();
     }, setDisabled: function(disabled) {
       el.card.classList.toggle("disabled-card", disabled);
@@ -1609,12 +1749,31 @@
   }
 
   // Geburtsdatum + Gesundheitsstatus eines Kandidaten (auf Startseite erfasst)
+  // Prüft, ob ein Geburtsdatum im Format TT.MM.JJJJ gültig ist
+  // (richtiges Format, real existierendes Datum, plausibles Jahr).
+  function isValidDob(value) {
+    const v = (value || "").trim();
+    const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!m) return false;
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const year = parseInt(m[3], 10);
+    const currentYear = new Date().getFullYear();
+    if (year < 1900 || year > currentYear) return false;
+    if (month < 1 || month > 12) return false;
+    // Tagesanzahl des jeweiligen Monats (inkl. Schaltjahr) prüfen
+    const daysInMonth = new Date(year, month, 0).getDate();
+    if (day < 1 || day > daysInMonth) return false;
+    return true;
+  }
+
   function getPersonStartInfo(id) {
     const dobEl = document.getElementById("start-" + id + "-dob");
     const checked = document.querySelector('input[name="' + id + '-health"]:checked');
     const answer = checked ? checked.value : null; // "nein" | "ja" | null
     return {
       dob: dobEl ? dobEl.value : "",
+      dobValid: dobEl ? isValidDob(dobEl.value) : false,
       healthAnswer: answer,
       healthAnswered: answer !== null,
       // "nein" = keine Veränderung = gesund/zugelassen => NEIN ankreuzen
@@ -1662,6 +1821,9 @@
     } else {
       startView.classList.remove("active");
       testView.classList.add("active");
+      // Flaschendruck-Erinnerung bei jedem Eintritt in die Testseite wieder zeigen
+      const reminder = document.getElementById("pressure-reminder");
+      if (reminder) reminder.style.display = "flex";
     }
   }
 
@@ -1683,7 +1845,11 @@
     function checkCandidate(name, info, label) {
       if (!name) return; // ohne Name nimmt der Kandidat nicht teil
       const fehlend = [];
-      if (!info.dob.trim()) fehlend.push("Geburtsdatum");
+      if (!info.dob.trim()) {
+        fehlend.push("Geburtsdatum");
+      } else if (!info.dobValid) {
+        fehlend.push("gültiges Geburtsdatum (TT.MM.JJJJ)");
+      }
       if (!info.healthAnswered) fehlend.push("Selbstdeklaration (Ja/Nein)");
       if (fehlend.length > 0) {
         missing.push(label + " (" + name + "): " + fehlend.join(", "));
@@ -1757,12 +1923,20 @@
     let ok = (n1 || n2); // mindestens ein Kandidat
     function complete(name, info) {
       if (!name) return true; // ohne Name keine Pflicht
-      return info.dob.trim() !== "" && info.healthAnswered;
+      return info.dobValid && info.healthAnswered;
     }
     if (!complete(n1, i1)) ok = false;
     if (!complete(n2, i2)) ok = false;
     startBtn.disabled = !ok;
     startBtn.classList.toggle("disabled", !ok);
+
+    // Geburtsdatum-Felder rot markieren, wenn etwas eingegeben wurde, aber ungültig ist
+    [["p1", n1, i1], ["p2", n2, i2]].forEach(function(entry) {
+      const dobEl = document.getElementById("start-" + entry[0] + "-dob");
+      if (!dobEl) return;
+      const hasValue = dobEl.value.trim() !== "";
+      dobEl.classList.toggle("invalid-input", hasValue && !entry[2].dobValid);
+    });
   }
 
   // Auf alle relevanten Eingaben reagieren
@@ -1778,6 +1952,15 @@
     });
   });
   updateStartButtonState();
+
+  // Flaschendruck-Erinnerung wegklickbar machen
+  const pressureReminderClose = document.getElementById("pressure-reminder-close");
+  if (pressureReminderClose) {
+    pressureReminderClose.addEventListener("click", function() {
+      const reminder = document.getElementById("pressure-reminder");
+      if (reminder) reminder.style.display = "none";
+    });
+  }
 })();
 </script>
 </body>
