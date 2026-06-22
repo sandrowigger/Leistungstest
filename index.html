@@ -74,10 +74,7 @@
     font-family: inherit;
   }
   .pressure-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 14px;
+    display: none;
   }
   .pressure-field label {
     display: block;
@@ -101,6 +98,100 @@
     font-variant-numeric: tabular-nums;
   }
   .pressure-field input::placeholder { color: #6b6b65; }
+
+  /* === Flaschendruck-Dialoge === */
+  .pressure-dialog-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 14, 24, 0.78);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .pressure-dialog-backdrop.open { display: flex; }
+  .pressure-dialog {
+    background: #1a2a3d;
+    border: 1px solid #2d4663;
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  }
+  .pressure-dialog h2 {
+    margin: 0 0 6px;
+    font-size: 19px;
+    color: #D4E4F4;
+    font-weight: 600;
+  }
+  .pressure-dialog .dialog-hint {
+    margin: 0 0 20px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #7BB0E8;
+  }
+  .pressure-dialog .dialog-candidate {
+    margin-bottom: 18px;
+  }
+  .pressure-dialog .dialog-candidate-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #D4E4F4;
+    margin-bottom: 8px;
+  }
+  .pressure-dialog .dialog-field label {
+    display: block;
+    font-size: 13px;
+    color: #9cc7ee;
+    margin-bottom: 6px;
+  }
+  .pressure-dialog .dialog-field input {
+    width: 100%;
+    font-size: 17px;
+    font-weight: 500;
+    padding: 11px 12px;
+    border: 1px solid #2d4663;
+    border-radius: 9px;
+    background: #0f1c2d;
+    color: #f0f6fc;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+  }
+  .pressure-dialog .dialog-field input:focus {
+    outline: none;
+    border-color: #7BB0E8;
+  }
+  .pressure-dialog .dialog-field input.invalid-input {
+    border-color: #E24B4A;
+    background: #3a1212;
+  }
+  .pressure-dialog .dialog-error {
+    color: #f0a8a8;
+    font-size: 13px;
+    margin: 0 0 14px;
+    display: none;
+  }
+  .pressure-dialog .dialog-error.show { display: block; }
+  .pressure-dialog .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .pressure-dialog .dialog-ok {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 11px 28px;
+    border-radius: 10px;
+    border: none;
+    background: #2f6fb0;
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pressure-dialog .dialog-ok:hover { background: #3a82cc; }
   .status {
     font-size: 11px;
     color: #b8b8b3;
@@ -771,10 +862,58 @@
   </div>
 
   <div class="view" id="test-view">
-    <div class="reminder-banner" id="pressure-reminder">
-      <span>💡 Bitte den <b>Flaschendruck vor dem Test</b> bei jedem Kandidaten erfassen – und nach dem Test den Enddruck nicht vergessen.</span>
-      <button type="button" class="reminder-close" id="pressure-reminder-close" aria-label="Hinweis schliessen">✕</button>
+    <!-- Dialog: Flaschendruck VOR dem Test (beide Kandidaten) -->
+    <div class="pressure-dialog-backdrop" id="pressure-before-dialog">
+      <div class="pressure-dialog" role="dialog" aria-modal="true" aria-labelledby="pressure-before-title">
+        <h2 id="pressure-before-title">Flaschendruck vor dem Test</h2>
+        <p class="dialog-hint">Bitte den Anfangsdruck beider Kandidaten erfassen.</p>
+        <div class="dialog-candidate">
+          <div class="dialog-candidate-name" id="before-p1-name">Kandidat 1</div>
+          <div class="dialog-field">
+            <label for="before-p1-input">Druck vor (bar)</label>
+            <input type="number" inputmode="numeric" min="0" max="400" id="before-p1-input" placeholder="z.B. 300" />
+          </div>
+        </div>
+        <div class="dialog-candidate">
+          <div class="dialog-candidate-name" id="before-p2-name">Kandidat 2</div>
+          <div class="dialog-field">
+            <label for="before-p2-input">Druck vor (bar)</label>
+            <input type="number" inputmode="numeric" min="0" max="400" id="before-p2-input" placeholder="z.B. 300" />
+          </div>
+        </div>
+        <p class="dialog-error" id="before-error">Bitte für beide Kandidaten einen gültigen Druck (0–400 bar) eingeben.</p>
+        <div class="dialog-actions">
+          <button type="button" class="dialog-ok" id="before-ok">OK</button>
+        </div>
+      </div>
     </div>
+
+    <!-- Dialog: Flaschendruck NACH dem Test (beide Kandidaten) -->
+    <div class="pressure-dialog-backdrop" id="pressure-after-dialog">
+      <div class="pressure-dialog" role="dialog" aria-modal="true" aria-labelledby="pressure-after-title">
+        <h2 id="pressure-after-title">Flaschendruck nach dem Test</h2>
+        <p class="dialog-hint">Beide Kandidaten haben den Test beendet. Bitte den Enddruck erfassen.</p>
+        <div class="dialog-candidate">
+          <div class="dialog-candidate-name" id="after-p1-name">Kandidat 1</div>
+          <div class="dialog-field">
+            <label for="after-p1-input">Druck nach (bar)</label>
+            <input type="number" inputmode="numeric" min="0" max="400" id="after-p1-input" placeholder="z.B. 200" />
+          </div>
+        </div>
+        <div class="dialog-candidate">
+          <div class="dialog-candidate-name" id="after-p2-name">Kandidat 2</div>
+          <div class="dialog-field">
+            <label for="after-p2-input">Druck nach (bar)</label>
+            <input type="number" inputmode="numeric" min="0" max="400" id="after-p2-input" placeholder="z.B. 200" />
+          </div>
+        </div>
+        <p class="dialog-error" id="after-error">Bitte für beide Kandidaten einen gültigen Druck (0–400 bar) eingeben.</p>
+        <div class="dialog-actions">
+          <button type="button" class="dialog-ok" id="after-ok">Übernehmen</button>
+        </div>
+      </div>
+    </div>
+
     <div class="grid">
       <div class="card" id="p1-card">
         <div class="disabled-overlay"><div class="disabled-overlay-pill">Nicht aktiv</div></div>
@@ -1627,7 +1766,7 @@
       });
   }
 
-  function makePerson(id) {
+  function makePerson(id, onDone) {
     const state = {
       stageIndex: 0,
       mode: "idle",  // idle | station | transition | post-station | done
@@ -1846,11 +1985,13 @@
         stopTick();
         if (state.stageIndex >= STATIONS.length - 1) {
           state.mode = "done";
+          render();
+          if (typeof onDone === "function") onDone();
         } else {
           state.mode = "transition";
           startTick();
+          render();
         }
-        render();
       } else if (state.mode === "transition") {
         const elapsed = (performance.now() - state.startedAt) / 1000;
         state.records.push({
@@ -1908,7 +2049,10 @@
       });
     });
     render();
-    return { btnClick, getState: function() { return state; }, getName: function() { return el.nameInput.value; }, resetSilently: function() {
+    return { btnClick, getState: function() { return state; }, getName: function() { return el.nameInput.value; },
+      isDone: function() { return state.mode === "done"; },
+      isActive: function() { return !el.card.classList.contains("disabled-card"); },
+      resetSilently: function() {
       stopTick();
       state.stageIndex = 0;
       state.mode = "idle";
@@ -1968,8 +2112,20 @@
     };
   }
 
-  const p1 = makePerson("p1");
-  const p2 = makePerson("p2");
+  const p1 = makePerson("p1", function() { onCandidateDone(); });
+  const p2 = makePerson("p2", function() { onCandidateDone(); });
+
+  // Prüft nach jedem fertigen Kandidaten, ob ALLE aktiven Kandidaten fertig
+  // sind. Wenn ja, öffnet sich der Enddruck-Dialog (beide zusammen).
+  function onCandidateDone() {
+    const activePersons = [];
+    if (p1.isActive()) activePersons.push("p1");
+    if (p2.isActive()) activePersons.push("p2");
+    const allDone = activePersons.length > 0 && activePersons.every(function(pid) {
+      return (pid === "p1" ? p1 : p2).isDone();
+    });
+    if (allDone) openAfterDialog(activePersons);
+  }
 
   // Posten-Tabelle auf der Startseite befüllen
   const tbody = document.getElementById("stations-tbody");
@@ -2051,9 +2207,8 @@
     } else {
       startView.classList.remove("active");
       testView.classList.add("active");
-      // Flaschendruck-Erinnerung bei jedem Eintritt in die Testseite wieder zeigen
-      const reminder = document.getElementById("pressure-reminder");
-      if (reminder) reminder.style.display = "flex";
+      // Dialog für den Flaschendruck VOR dem Test öffnen (beide Kandidaten)
+      openBeforeDialog();
     }
   }
 
@@ -2188,14 +2343,139 @@
   // Kandidatenliste beim Öffnen der Seite automatisch laden
   loadCandidates();
 
-  // Flaschendruck-Erinnerung wegklickbar machen
-  const pressureReminderClose = document.getElementById("pressure-reminder-close");
-  if (pressureReminderClose) {
-    pressureReminderClose.addEventListener("click", function() {
-      const reminder = document.getElementById("pressure-reminder");
-      if (reminder) reminder.style.display = "none";
-    });
+  // === Flaschendruck-Dialoge ===============================================
+  // Welche Kandidaten sind beim aktuellen Durchgang aktiv?
+  function getActivePids() {
+    const pids = [];
+    if (p1.isActive()) pids.push("p1");
+    if (p2.isActive()) pids.push("p2");
+    return pids;
   }
+
+  // Liest einen Druckwert aus einem Dialogfeld; gibt null bei ungültig zurück.
+  function readPressure(inputEl) {
+    const v = parseFloat(inputEl.value);
+    if (isNaN(v) || v < 0 || v > 400) return null;
+    return v;
+  }
+
+  // --- Dialog: Druck VOR dem Test ------------------------------------------
+  function openBeforeDialog() {
+    const active = getActivePids();
+    if (active.length === 0) return;
+    const dlg = document.getElementById("pressure-before-dialog");
+    const err = document.getElementById("before-error");
+    err.classList.remove("show");
+
+    ["p1", "p2"].forEach(function(pid) {
+      const isActive = active.indexOf(pid) !== -1;
+      const block = document.getElementById("before-" + pid + "-name").parentElement;
+      block.style.display = isActive ? "block" : "none";
+      if (isActive) {
+        const nameEl = document.getElementById(pid + "-name");
+        document.getElementById("before-" + pid + "-name").textContent =
+          (nameEl && nameEl.value) ? nameEl.value : ("Kandidat " + pid.slice(1));
+        const inp = document.getElementById("before-" + pid + "-input");
+        inp.value = "";
+        inp.classList.remove("invalid-input");
+      }
+    });
+
+    dlg.classList.add("open");
+    const first = document.getElementById("before-" + active[0] + "-input");
+    if (first) setTimeout(function() { first.focus(); }, 50);
+  }
+
+  function confirmBeforeDialog() {
+    const active = getActivePids();
+    const err = document.getElementById("before-error");
+    let allValid = true;
+    const values = {};
+    active.forEach(function(pid) {
+      const inp = document.getElementById("before-" + pid + "-input");
+      const val = readPressure(inp);
+      if (val === null) {
+        allValid = false;
+        inp.classList.add("invalid-input");
+      } else {
+        inp.classList.remove("invalid-input");
+        values[pid] = val;
+      }
+    });
+    if (!allValid) { err.classList.add("show"); return; }
+    // Werte in die (versteckten) Kartenfelder schreiben → Rest der App nutzt sie
+    active.forEach(function(pid) {
+      document.getElementById(pid + "-pressure-before").value = values[pid];
+    });
+    document.getElementById("pressure-before-dialog").classList.remove("open");
+  }
+
+  // --- Dialog: Druck NACH dem Test -----------------------------------------
+  function openAfterDialog(activePids) {
+    const active = activePids || getActivePids();
+    if (active.length === 0) return;
+    const dlg = document.getElementById("pressure-after-dialog");
+    const err = document.getElementById("after-error");
+    err.classList.remove("show");
+
+    ["p1", "p2"].forEach(function(pid) {
+      const isActive = active.indexOf(pid) !== -1;
+      const block = document.getElementById("after-" + pid + "-name").parentElement;
+      block.style.display = isActive ? "block" : "none";
+      if (isActive) {
+        const nameEl = document.getElementById(pid + "-name");
+        document.getElementById("after-" + pid + "-name").textContent =
+          (nameEl && nameEl.value) ? nameEl.value : ("Kandidat " + pid.slice(1));
+        const inp = document.getElementById("after-" + pid + "-input");
+        inp.value = "";
+        inp.classList.remove("invalid-input");
+      }
+    });
+
+    dlg.classList.add("open");
+    const first = document.getElementById("after-" + active[0] + "-input");
+    if (first) setTimeout(function() { first.focus(); }, 50);
+  }
+
+  function confirmAfterDialog() {
+    const active = getActivePids();
+    const err = document.getElementById("after-error");
+    let allValid = true;
+    const values = {};
+    active.forEach(function(pid) {
+      const inp = document.getElementById("after-" + pid + "-input");
+      const val = readPressure(inp);
+      if (val === null) {
+        allValid = false;
+        inp.classList.add("invalid-input");
+      } else {
+        inp.classList.remove("invalid-input");
+        values[pid] = val;
+      }
+    });
+    if (!allValid) { err.classList.add("show"); return; }
+    active.forEach(function(pid) {
+      const afterEl = document.getElementById(pid + "-pressure-after");
+      afterEl.value = values[pid];
+      // Übersicht des Kandidaten neu zeichnen, damit der Verbrauch erscheint
+      afterEl.dispatchEvent(new Event("input"));
+    });
+    document.getElementById("pressure-after-dialog").classList.remove("open");
+  }
+
+  // Buttons verdrahten
+  document.getElementById("before-ok").addEventListener("click", confirmBeforeDialog);
+  document.getElementById("after-ok").addEventListener("click", confirmAfterDialog);
+
+  // Enter-Taste bestätigt den jeweils offenen Dialog
+  ["before-p1-input", "before-p2-input"].forEach(function(idd) {
+    const el = document.getElementById(idd);
+    if (el) el.addEventListener("keydown", function(e) { if (e.key === "Enter") confirmBeforeDialog(); });
+  });
+  ["after-p1-input", "after-p2-input"].forEach(function(idd) {
+    const el = document.getElementById(idd);
+    if (el) el.addEventListener("keydown", function(e) { if (e.key === "Enter") confirmAfterDialog(); });
+  });
 })();
 </script>
 </body>
