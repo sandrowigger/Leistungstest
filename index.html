@@ -1633,7 +1633,7 @@
           const name = (c.name || "").trim();
           const vorname = (c.vorname || "").trim();
           const dob = normalizeDob(c.dob);
-          const label = (name + " " + vorname).trim() + (dob ? " (" + dob + ")" : "");
+          const label = (vorname + " " + name).trim() + (dob ? " (" + dob + ")" : "");
           return { row: c.row, name: name, vorname: vorname, dob: dob, label: label };
         });
         populateCandidateSelects();
@@ -2177,7 +2177,7 @@
       const cand = openCandidates.find(function(c){ return String(c.row) === rowVal; });
       if (cand) {
         selectedRow[pid] = cand.row;
-        if (nameEl) nameEl.value = (cand.name + " " + cand.vorname).trim();
+        if (nameEl) nameEl.value = (cand.vorname + " " + cand.name).trim();
         if (dobEl) dobEl.value = cand.dob;
       }
       // Verhindern, dass derselbe Kandidat zweimal gewählt wird
